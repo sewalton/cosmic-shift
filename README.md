@@ -47,7 +47,7 @@ normal colors instantly.
 
 ```sh
 sudo apt install build-essential pkg-config libwayland-dev
-git clone https://github.com/YOUR-USERNAME/cosmic-shift.git
+git clone https://github.com/sewalton/cosmic-shift.git
 cd cosmic-shift
 make
 make install PREFIX=~/.local
@@ -74,10 +74,13 @@ screen live as you drag, an on/off switch, and a "Start at login" switch
 that manages the systemd user service for you. Settings persist in
 `~/.config/cosmic-shift.conf`.
 
-Closing the window does *not* turn off the color shift — the GUI hands
-off to a background daemon. Reopen the GUI (or flip its switch) to
-change or disable it. Requires python3-gi with GTK 4 (preinstalled on
-Pop!_OS).
+While running, the app shows an icon in the system tray (COSMIC's
+Status Area applet, or any StatusNotifierItem host). Closing the window
+minimizes to the tray — click the icon or pick "Open Cosmic Shift" from
+its menu to bring the window back, or "Quit" to exit the GUI. Neither
+turns off the color shift: quitting hands off to a background daemon.
+Without a tray host, closing the window hands off the same way. Requires
+python3-gi with GTK 4 (preinstalled on Pop!_OS).
 
 ## Usage (command line)
 

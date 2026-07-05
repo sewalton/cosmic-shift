@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- sun with a crescent bite: cosmic shift -->
+  <path fill="#363636" d="M7.5 2A5.5 5.5 0 1 0 13 7.5 5.5 5.5 0 0 0 7.5 2zm0 1.5a4 4 0 0 1 1.53.3 3.9 3.9 0 0 0 .13 5.53 3.94 3.94 0 0 0 2.3 1.06A4 4 0 1 1 7.5 3.5z"/>
+  <circle fill="#363636" cx="13.5" cy="2.5" r="1"/>
+</svg>

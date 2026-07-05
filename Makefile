@@ -1,4 +1,5 @@
 PREFIX ?= /usr/local
+APP_ID = io.cosmicshift.Settings
 CC ?= cc
 CFLAGS ?= -O2 -Wall -Wextra
 WAYLAND_SCANNER = wayland-scanner
@@ -32,13 +33,21 @@ cosmic-shift: cosmic-shift.c $(PROTO_C) $(PROTO_H)
 install: cosmic-shift
 	install -Dm755 cosmic-shift $(DESTDIR)$(PREFIX)/bin/cosmic-shift
 	install -Dm755 cosmic-shift-gtk $(DESTDIR)$(PREFIX)/bin/cosmic-shift-gtk
-	install -Dm644 cosmic-shift.desktop \
-		$(DESTDIR)$(PREFIX)/share/applications/cosmic-shift.desktop
+	install -Dm644 $(APP_ID).desktop \
+		$(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
+	install -Dm644 icons/$(APP_ID).svg \
+		$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg
+	install -Dm644 icons/$(APP_ID)-symbolic.svg \
+		$(DESTDIR)$(PREFIX)/share/icons/hicolor/symbolic/apps/$(APP_ID)-symbolic.svg
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/cosmic-shift.desktop
+	-gtk-update-icon-cache -f $(DESTDIR)$(PREFIX)/share/icons/hicolor 2>/dev/null || true
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/cosmic-shift \
 		$(DESTDIR)$(PREFIX)/bin/cosmic-shift-gtk \
-		$(DESTDIR)$(PREFIX)/share/applications/cosmic-shift.desktop
+		$(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop \
+		$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg \
+		$(DESTDIR)$(PREFIX)/share/icons/hicolor/symbolic/apps/$(APP_ID)-symbolic.svg
 
 clean:
 	rm -f cosmic-shift $(PROTO_C) $(PROTO_H)

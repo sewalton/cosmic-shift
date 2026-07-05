@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#33265c"/>
+      <stop offset="1" stop-color="#150f2e"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd76e"/>
+      <stop offset="1" stop-color="#ff7a3d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.55" stop-color="#ffae5e" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffae5e" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/>
+  <!-- stars -->
+  <circle cx="34" cy="32" r="2.4" fill="#cfc4ff" opacity="0.9"/>
+  <circle cx="98" cy="88" r="2" fill="#cfc4ff" opacity="0.7"/>
+  <circle cx="90" cy="26" r="1.6" fill="#cfc4ff" opacity="0.6"/>
+  <circle cx="26" cy="92" r="1.6" fill="#cfc4ff" opacity="0.6"/>
+  <path d="M100 40l1.6 4.4 4.4 1.6-4.4 1.6-1.6 4.4-1.6-4.4-4.4-1.6 4.4-1.6z" fill="#e8e0ff" opacity="0.9"/>
+  <!-- warm sun with a crescent shifted out of it -->
+  <circle cx="60" cy="66" r="38" fill="url(#glow)"/>
+  <circle cx="60" cy="66" r="26" fill="url(#sun)"/>
+  <circle cx="74" cy="54" r="22" fill="url(#bg)"/>
+  <circle cx="60" cy="66" r="26" fill="none" stroke="#ffb347" stroke-opacity="0.35" stroke-width="2"/>
+</svg>
