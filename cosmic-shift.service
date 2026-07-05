@@ -1,0 +1,17 @@
+[Unit]
+Description=Cosmic Shift - redshift-style color temperature for COSMIC/Wayland
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Adjust to taste (or let the GUI's "Start at login" switch manage this
+# file for you):
+#   constant temperature:  %h/.local/bin/cosmic-shift -t 3400
+#   dimmer, less yellow:   %h/.local/bin/cosmic-shift -t 2700 -s 0.02
+#   follow the sun:        %h/.local/bin/cosmic-shift -l 40.7:-74.0 -T 6500:3800
+ExecStart=%h/.local/bin/cosmic-shift -t 3400
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

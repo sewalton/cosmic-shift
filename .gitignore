@@ -1,0 +1,6 @@
+cosmic-shift
+*-client-protocol.c
+*-client-protocol.h
+__pycache__/
+*.pyc
+*.deb

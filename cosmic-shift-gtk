@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""cosmic-shift-gtk - GUI controller for cosmic-shift (redshift for COSMIC).
+
+Drives a `cosmic-shift -i` child process over stdin, so slider changes
+apply to the screen instantly. Settings persist in
+~/.config/cosmic-shift.conf. Closing the window hands the daemon off to a
+detached background process so the color shift survives; the "Start at
+login" switch manages a systemd user service.
+"""
+
+import configparser
+import os
+import shutil
+import signal
+import subprocess
+import sys
+
+import gi
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib, Gtk
+
+APP_ID = "io.cosmicshift.Settings"
+CONF_PATH = os.path.expanduser("~/.config/cosmic-shift.conf")
+UNIT_PATH = os.path.expanduser("~/.config/systemd/user/cosmic-shift.service")
+
+DEFAULTS = {
+    "enabled": "true",
+    "temp": "2700",
+    "tint": "0.02",
+    "brightness": "1.0",
+    "autostart": "false",
+}
+
+UNIT_TEMPLATE = """\
+[Unit]
+Description=Cosmic Shift - redshift-style color temperature for COSMIC/Wayland
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Managed by cosmic-shift-gtk; edits here are overwritten.
+ExecStart={exec_start}
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
+"""
+
+
+def find_daemon():
+    path = shutil.which("cosmic-shift")
+    if path:
+        return path
+    local = os.path.expanduser("~/.local/bin/cosmic-shift")
+    if os.access(local, os.X_OK):
+        return local
+    return None
+
+
+class Controller:
+    """Owns the cosmic-shift -i child process."""
+
+    def __init__(self, daemon_path):
+        self.daemon_path = daemon_path
+        self.proc = None
+
+    def running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self, temp, tint, brightness):
+        self.stop()
+        self.proc = subprocess.Popen(
+            [self.daemon_path, "-i"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        self.send(temp, tint, brightness)
+
+    def send(self, temp, tint, brightness):
+        if not self.running():
+            return False
+        try:
+            self.proc.stdin.write(
+                f"temp {int(temp)}\ntint {tint:.3f}\nbrightness {brightness:.3f}\n")
+            self.proc.stdin.flush()
+            return True
+        except (BrokenPipeError, OSError):
+            self.proc = None
+            return False
+
+    def stop(self):
+        if self.proc is not None:
+            try:
+                self.proc.stdin.close()  # EOF: daemon restores and exits
+                self.proc.wait(timeout=2)
+            except Exception:
+                self.proc.kill()
+            self.proc = None
+
+    def detach(self, temp, tint, brightness):
+        """Replace the managed child with a detached daemon (survives GUI)."""
+        subprocess.Popen(
+            [self.daemon_path, "-t", str(int(temp)), "-s", f"{tint:.3f}",
+             "-b", f"{brightness:.3f}"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        self.stop()
+
+
+class Window(Gtk.ApplicationWindow):
+    def __init__(self, app, ctl, conf):
+        super().__init__(application=app, title="Cosmic Shift")
+        self.ctl = ctl
+        self.conf = conf
+        self._loading = True
+        self._debounce = 0
+        self.set_default_size(440, -1)
+        self.set_resizable(False)
+
+        header = Gtk.HeaderBar()
+        self.enable_switch = Gtk.Switch(
+            valign=Gtk.Align.CENTER,
+            active=conf.getboolean("cosmic-shift", "enabled"))
+        self.enable_switch.connect("notify::active", self.on_enable)
+        box = Gtk.Box(spacing=8)
+        box.append(Gtk.Label(label="Enabled"))
+        box.append(self.enable_switch)
+        header.pack_start(box)
+        self.set_titlebar(header)
+
+        grid = Gtk.Grid(row_spacing=10, column_spacing=12,
+                        margin_top=18, margin_bottom=18,
+                        margin_start=18, margin_end=18)
+        self.set_child(grid)
+
+        self.temp_scale = self._add_scale(
+            grid, 0, "Temperature",
+            1000, 6500, 50, conf.getfloat("cosmic-shift", "temp"),
+            marks=[(2700, "2700 K"), (3400, "3400 K"), (4500, "4500 K"),
+                   (6500, "6500 K")],
+            fmt=lambda v: f"{int(v)} K")
+
+        self.tint_scale = self._add_scale(
+            grid, 2, "Tint",
+            0, 100, 1, conf.getfloat("cosmic-shift", "tint") * 100,
+            marks=[(2, "2%"), (50, "50%"), (100, "100%")],
+            fmt=lambda v: f"{int(v)}%")
+
+        self.bright_scale = self._add_scale(
+            grid, 4, "Brightness",
+            10, 100, 1, conf.getfloat("cosmic-shift", "brightness") * 100,
+            marks=[(50, "50%"), (100, "100%")],
+            fmt=lambda v: f"{int(v)}%")
+
+        hint = Gtk.Label(
+            label="Lower tint = less yellow cast, more dimming.\n"
+                  "Lower temperature = warmer and darker.",
+            wrap=True, justify=Gtk.Justification.CENTER)
+        hint.add_css_class("dim-label")
+        grid.attach(hint, 0, 6, 2, 1)
+
+        auto_box = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER, margin_top=6)
+        self.autostart_switch = Gtk.Switch(
+            valign=Gtk.Align.CENTER,
+            active=conf.getboolean("cosmic-shift", "autostart"))
+        self.autostart_switch.connect("notify::active", self.on_autostart)
+        auto_box.append(Gtk.Label(label="Start at login"))
+        auto_box.append(self.autostart_switch)
+        grid.attach(auto_box, 0, 7, 2, 1)
+
+        credit = Gtk.Label(label="Created by: Seth Walton", margin_top=10)
+        credit.add_css_class("dim-label")
+        credit.add_css_class("caption")
+        grid.attach(credit, 0, 8, 2, 1)
+
+        self.connect("close-request", self.on_close)
+        self._loading = False
+        if self.enable_switch.get_active():
+            self.ctl.start(*self.values())
+
+    def _add_scale(self, grid, row, label, lo, hi, step, value, marks, fmt):
+        lbl = Gtk.Label(label=label, halign=Gtk.Align.START)
+        grid.attach(lbl, 0, row, 2, 1)
+        scale = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, lo, hi, step)
+        scale.set_value(value)
+        scale.set_hexpand(True)
+        scale.set_draw_value(True)
+        scale.set_value_pos(Gtk.PositionType.RIGHT)
+        scale.set_format_value_func(lambda s, v: fmt(v))
+        for mval, mtext in marks:
+            scale.add_mark(mval, Gtk.PositionType.BOTTOM, mtext)
+        scale.connect("value-changed", self.on_slider)
+        grid.attach(scale, 0, row + 1, 2, 1)
+        return scale
+
+    def values(self):
+        return (self.temp_scale.get_value(),
+                self.tint_scale.get_value() / 100.0,
+                self.bright_scale.get_value() / 100.0)
+
+    # --- signal handlers -------------------------------------------------
+
+    def on_slider(self, _scale):
+        if self._loading:
+            return
+        if self._debounce:
+            GLib.source_remove(self._debounce)
+        self._debounce = GLib.timeout_add(100, self._push)
+
+    def _push(self):
+        self._debounce = 0
+        if self.enable_switch.get_active():
+            if not self.ctl.send(*self.values()):
+                self.ctl.start(*self.values())
+        return GLib.SOURCE_REMOVE
+
+    def on_enable(self, switch, _pspec):
+        if self._loading:
+            return
+        if switch.get_active():
+            self.ctl.start(*self.values())
+        else:
+            self.ctl.stop()
+
+    def on_autostart(self, switch, _pspec):
+        if self._loading:
+            return
+        if switch.get_active():
+            self.write_unit()
+            subprocess.run(["systemctl", "--user", "enable",
+                            "cosmic-shift"], capture_output=True)
+        else:
+            subprocess.run(["systemctl", "--user", "disable",
+                            "cosmic-shift"], capture_output=True)
+
+    def on_close(self, _win):
+        self.save()
+        if self.enable_switch.get_active():
+            # keep the shift active after the window goes away
+            self.ctl.detach(*self.values())
+        else:
+            self.ctl.stop()
+        return False
+
+    # --- persistence ------------------------------------------------------
+
+    def save(self):
+        temp, tint, brightness = self.values()
+        sec = self.conf["cosmic-shift"]
+        sec["enabled"] = str(self.enable_switch.get_active()).lower()
+        sec["temp"] = str(int(temp))
+        sec["tint"] = f"{tint:.3f}"
+        sec["brightness"] = f"{brightness:.3f}"
+        sec["autostart"] = str(self.autostart_switch.get_active()).lower()
+        os.makedirs(os.path.dirname(CONF_PATH), exist_ok=True)
+        with open(CONF_PATH, "w") as f:
+            self.conf.write(f)
+        if self.autostart_switch.get_active():
+            self.write_unit()
+
+    def write_unit(self):
+        temp, tint, brightness = self.values()
+        exec_start = (f"{self.ctl.daemon_path} -t {int(temp)} "
+                      f"-s {tint:.3f} -b {brightness:.3f}")
+        os.makedirs(os.path.dirname(UNIT_PATH), exist_ok=True)
+        with open(UNIT_PATH, "w") as f:
+            f.write(UNIT_TEMPLATE.format(exec_start=exec_start))
+        subprocess.run(["systemctl", "--user", "daemon-reload"],
+                       capture_output=True)
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID)
+
+    def do_activate(self):
+        win = self.get_active_window()
+        if win is not None:
+            win.present()
+            return
+
+        daemon = find_daemon()
+        if daemon is None:
+            dlg = Gtk.MessageDialog(
+                text="cosmic-shift binary not found",
+                secondary_text="Run 'make install PREFIX=~/.local' first.",
+                buttons=Gtk.ButtonsType.CLOSE)
+            dlg.connect("response", lambda d, r: self.quit())
+            dlg.present()
+            return
+
+        # Take over from any daemon already running (systemd unit, detached
+        # instance from a previous GUI session, or a manual CLI run).
+        subprocess.run(["systemctl", "--user", "stop", "cosmic-shift"],
+                       capture_output=True)
+        subprocess.run(["pkill", "-x", "cosmic-shift"], capture_output=True)
+
+        conf = configparser.ConfigParser()
+        conf["cosmic-shift"] = dict(DEFAULTS)
+        conf.read(CONF_PATH)
+
+        win = Window(self, Controller(daemon), conf)
+        win.present()
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    sys.exit(App().run(sys.argv))

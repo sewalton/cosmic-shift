@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Cosmic Shift
+GenericName=Night Light
+Comment=Redshift-style color temperature for COSMIC/Wayland
+Exec=cosmic-shift-gtk
+Icon=night-light-symbolic
+Terminal=false
+Categories=Settings;Utility;
+Keywords=redshift;night;light;blue;color;temperature;gamma;
